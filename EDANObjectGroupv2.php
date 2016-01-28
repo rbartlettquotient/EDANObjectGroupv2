@@ -1,16 +1,19 @@
 <?php
 
 /*
- * PHP classes to implement API calls for OGMT.
+ * PHP classes to implement API calls for the Edan Application "Object Group Management Tool" (OGMT).
  * Non-Drupal specific.
  * These classes can be used within Drupal modules by including this and supporting PHP files in the module includes.
  *
  * Supports API calls for EDAN 2.0:
  * http://edandev.si.edu/applications/#api-_
  *
+ * Source at https://github.com/rbartlettquotient/EDANObjectGroupv2
+ *
+ * 2015-01-28
  */
 
-namespace EDAN\OGMTv2 {
+namespace EDAN\OGMT {
 
   require_once('EDANInterface.php');
 
@@ -112,7 +115,7 @@ namespace EDAN\OGMTv2 {
       else {
         if(NULL !== $published) {
           $this->published = $published;
-          if($published) {
+          if($published == 1) {
             $params['published'] = 0; // in this version of the API, set published to zero if it is true
           }
           else {
@@ -186,7 +189,7 @@ namespace EDAN\OGMTv2 {
 
   class ObjectGroup extends \EDAN\EDANBase {
 
-    public $objectGroupId;
+    protected $objectGroupId;
     protected $deleted; // true or false
 
     public $objectGroupPages;
@@ -428,6 +431,9 @@ namespace EDAN\OGMTv2 {
         elseif($arr['published'] == 1) { // published = 1 means un-published in this version of the API
           $this->published = false;
         }
+        else {
+          $this->published = true;
+        }
         // the default for published is true
       }
       if(array_key_exists('featured', $arr)) {
@@ -452,8 +458,8 @@ namespace EDAN\OGMTv2 {
       // objectGroupImageUri - "feature": { "type": "image", "url": "" }
       if(array_key_exists('feature', $arr)) {
         $feature_array = $arr['feature'];
-        if(array_key_exists('uri', $feature_array)) {
-          $this->objectGroupImageUri = $feature_array['uri'];
+        if(array_key_exists('url', $feature_array)) {
+          $this->objectGroupImageUri = $feature_array['url'];
         }
       } // if we have a feature
 
@@ -517,13 +523,11 @@ namespace EDAN\OGMTv2 {
         return false;
       }
 
-      $this->defaultPageId = $pageId;
-
       $params = array();
       $service = 'ogmt/v1.0/adminogmt/setDefaultPage.htm';
 
       $params['objectGroupId'] = $this->objectGroupId;
-      $params['pageId'] = $this->defaultPageId;
+        $params['pageId'] = $pageId;
 
       // save the object group
       $got_object = $this->edan_connection->callEDAN($service, $params);
@@ -543,6 +547,7 @@ namespace EDAN\OGMTv2 {
         return false;
       }
 
+        $this->defaultPageId = $pageId;
       return true;
 
     } // set the default page for this object group
@@ -618,11 +623,22 @@ namespace EDAN\OGMTv2 {
         return false;
       }
 
+        // if we were able to set the page order successfully, update the page order for this object group
+        $tmp = $this->objectGroupPages;
+        $this->objectGroupPages = array();
+        foreach($pages as $key=> $pageId) {
+          foreach($tmp as $k => $page) {
+            if($page->getPageId() == $pageId) {
+              $this->objectGroupPages[] = $page;
+            }
+          }
+        }
+
       return true;
     } // save the menu for the object group, in the current order
 
     public function fileListing() {
-      // is this necessary? not used in existing modules
+        // not used in existing modules
     }
 
     public function getToken() {
@@ -685,7 +701,7 @@ namespace EDAN\OGMTv2 {
         return false;
       }
 
-      //@todo: On save attempt, load object groups with matching title
+        //@todo: On save attempt, load object groups with matching uri
       //if count > 0, fail the attempted save
 
       $params = array();
@@ -746,9 +762,10 @@ namespace EDAN\OGMTv2 {
         return false;
       }
 
-      // if this is a new object group, see if we got the id back
+        // set the id if we got it back
       if (array_key_exists('objectGroupId', $this->results_json)) {
         $this->objectGroupId = $this->results_json['objectGroupId'];
+          $this->uri = array_key_exists('url', $this->results_json) ? $this->results_json['url'] : '';
       }
       else {
         $this->errors[] = 'Unable to save Object Group. No ObjectGroupId found in response. save()';
@@ -897,8 +914,12 @@ namespace EDAN\OGMTv2 {
 
       // should we make sure results_json contains the object group?
 
-      // update pages for this group
-      unset($this->objectgroup_pages[$pageId]);
+        // delete the page from this object group
+        foreach($this->objectGroupPages as $k => $page) {
+          if($page->getPageId() == $pageId) {
+            unset($this->objectGroupPages[$k]);
+          }
+        }
       return true;
 
     } // delete the specified page from the object group
@@ -908,7 +929,7 @@ namespace EDAN\OGMTv2 {
   class ObjectGroupPage extends \EDAN\EDANBase {
 
     protected $objectGroupId;
-      protected $pageId;
+    protected $pageId;
 
     public $edan_connection;
     public $title;
@@ -1147,17 +1168,17 @@ namespace EDAN\OGMTv2 {
     // optional
     protected $pageId;
     public $listType;
-      public $listName;
+    public $listName;
     public $size;
     public $items;
-      public $queryTerms; // query terms concatenated with +
-      public $queryFacets; // array of facets
+    public $queryTerms; // query terms concatenated with +
+    public $queryFacets; // array of facets
     public $settings;
 
     public function __construct( $arr = NULL, $edan_connection, $objectGroupId = NULL, $pageId = NULL) {
 
       $this->objectGroupId = $this->pageId = null;
-        $this->listName = '';
+      $this->listName = '';
       $this->listType = 0; // default to hand-picked list of objects
       $this->size = 0;
       $this->items = array();
@@ -1402,7 +1423,7 @@ namespace EDAN\OGMTv2 {
         // recreate our list so this object list has the objects in the correct order
         if(is_array($this->results_json)
           && array_key_exists('lists', $this->results_json)) {
-          $this->loadFromArray($this->results_json['lists'], $this->objectGroupId, $this->pageId);
+          $this->loadFromArray($this->results_json['lists']['items'], $this->objectGroupId, $this->pageId);
         }
         return true;
 
@@ -1558,6 +1579,7 @@ namespace EDAN\OGMTv2 {
       }
 
       if(array_key_exists('items', $arr)) {
+          $b_content_items = false;
 
           if(count($arr['items']) > 0 && is_array($arr['items'][0])) {
             // each might have content, type, url
@@ -1624,7 +1646,7 @@ namespace EDAN\OGMTv2 {
                 $this->queryFacets[] = $v;
               }
               else {
-                $this->queryTerms = $v;
+                $this->queryTerms = urldecode($v);
               }
             }
             $this->items = array();
@@ -1658,11 +1680,18 @@ namespace EDAN\OGMTv2 {
         return false;
       }
 
-      $this->clear();
+        $ok = $this->clear();
+        if(!$ok) {
+        //  return false;
+        }
 
       if($this->listType == 0) {
         // if we are saving search params but listType is set for hand-picked objects, change the listType
-        $this->modifyType(1);
+          $ok = $this->modifyType(1);
+          $this->listType = 1;
+          if(!$ok) {
+          //  return false;
+          }
       }
 
       $this->queryTerms = $local_query_terms;
@@ -1687,9 +1716,10 @@ namespace EDAN\OGMTv2 {
         // action=modifyType will return 404 if the list doesn't exist yet
         // so we can't test for a return value
         $this->modifyType(0);
+		$this->listType = 0;
       }
 
-      $this->errors = array();
+      $this->errors = array(); // @todo- only ignore 404
       $ok = $this->addItems();
       return $ok;
 
@@ -1740,6 +1770,6 @@ namespace EDAN\OGMTv2 {
 
   } // ObjectList
 
-} // namespace EDAN\OGMTv2
+} // namespace EDAN\OGMT
 
 ?>

@@ -293,17 +293,19 @@
         $results = $edan->sendRequest($uri, $service, $post, $info);
         $this->results_raw = $results;
         $this->results_info = $info;
-
-dpm($uri);
-dpm($service);
-//dpm($info);
-if($service !== 'ogmt/v1.0/ogmt/objectgroups.htm'
-  && $service !== 'ogmt/v1.0/adminogmt/getObjectGroups.htm'
-  && $service !== 'ogmt/v1.0/adminogmt/objectListingMetadata.htm'
-  && $service !== 'ogmt/v1.0/adminogmt/objectgroups.htm') {
-//  dpm($results);
+/*
+dpm("---------------");
+dpm("OGMT CALL");
+dpm($service . '?' . $uri);
+if($service != 'ogmt/v1.0/ogmt/objectgroups.htm'
+  && $service != 'ogmt/v1.0/adminogmt/getObjectGroups.htm'
+  && $service != 'ogmt/v1.0/adminogmt/objectListingMetadata.htm'
+  && $service != 'ogmt/v1.0/adminogmt/objectgroups.htm') {
+dpm($results);
 }
-
+dpm("INFO:");
+dpm($info);
+*/
         if (!array_key_exists('http_code', $info)) {
           $this->errors[] = "EDAN did not return a HTTP code.";
           return FALSE;
