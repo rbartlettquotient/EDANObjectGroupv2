@@ -293,6 +293,8 @@
         $results = $edan->sendRequest($uri, $service, $post, $info);
         $this->results_raw = $results;
         $this->results_info = $info;
+
+//dpm($service . '?' . $uri);
 /*
 dpm("---------------");
 dpm("OGMT CALL");
@@ -319,6 +321,8 @@ dpm($info);
           try {
             $return = json_decode($results, TRUE);
             $this->results_json = $return;
+//dpm($return);
+
             $GLOBALS['ogmt_admin']['edan_request_cache'][$hash] = $return;
             return TRUE;
           }

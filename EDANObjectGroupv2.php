@@ -5,12 +5,12 @@
  * Non-Drupal specific.
  * These classes can be used within Drupal modules by including this and supporting PHP files in the module includes.
  *
- * Supports API calls for EDAN 2.0:
+ * Supports API calls for EDAN 1.0:
  * http://edandev.si.edu/applications/#api-_
  *
  * Source at https://github.com/rbartlettquotient/EDANObjectGroupv2
  *
- * 2015-01-28
+ * 2015-02-01
  */
 
 namespace EDAN\OGMT {
@@ -110,7 +110,9 @@ namespace EDAN\OGMT {
       }
       if(NULL !== $deleted) {
         $this->deleted = $deleted;
-        $params['published'] = -1;
+        if($this->deleted == true) {
+          $params['published'] = -1;
+        }
       }
       else {
         if(NULL !== $published) {
@@ -135,7 +137,6 @@ namespace EDAN\OGMT {
 
       // call the API to get the ObjectGroups data
       $got_objects = $this->edan_connection->callEDAN($service, $params);
-
       if(!$got_objects) {
         $this->errors += $this->edan_connection->getErrors();
         $this->errors[] = "Unable to retrieve object groups from EDAN.";
@@ -231,7 +232,7 @@ namespace EDAN\OGMT {
       $this->body = '';
       $this->objectGroupImageUri = '';
       $this->uri = '';
-        $this->groupType = NULL;
+      $this->groupType = NULL;
       $this->keywords = '';
       $this->published = true;
       $this->deleted = false;
@@ -336,7 +337,6 @@ namespace EDAN\OGMT {
         // set this object's properties and object list, pages and their object lists
         //      $this->objectGroupId = $jsonobj->response->objectGroupId;
         // load stuff from JSON into structures we are expecting
-
         $this->loadFromArray($this->results_json);
 
       } // if we have results_json
@@ -345,59 +345,59 @@ namespace EDAN\OGMT {
 
     } // load the object group by calling the API for data
 
-      public function loadByUri($uri, $adminView = true) {
-        //@todo test $uri for expected pattern
+    public function loadByUri($uri, $adminView = true) {
+      //@todo test $uri for expected pattern
 
-        $this->errors = array();
+      $this->errors = array();
 
-        if(NULL == $this->edan_connection || !is_object($this->edan_connection)) {
-          $this->errors[] = 'Cannot load Object Group. No EDAN connection set. load().';
-          return false;
+      if(NULL == $this->edan_connection || !is_object($this->edan_connection)) {
+        $this->errors[] = 'Cannot load Object Group. No EDAN connection set. load().';
+        return false;
+      }
+
+      $this->uri = $uri;
+      $service = 'ogmt/v1.0/adminogmt/getObjectGroup.htm';
+      if(false == $adminView) {
+        $service = 'ogmt/v1.0/ogmt/getObjectGroup.htm';
+      }
+      $params = array(
+        'objectGroupUrl' => $uri,
+      );
+
+      // load the object group if we have an objectGroupId
+      // call the API to get the ObjectGroup data
+      $got_object = $this->edan_connection->callEDAN($service, $params);
+
+      $this->results_json = $this->edan_connection->getResultsJSON();
+      $this->results_info = $this->edan_connection->getResultsInfo();
+      $this->results_raw = $this->edan_connection->getResultsRaw();
+
+      if(!$got_object) {
+        $this->errors += $this->edan_connection->getErrors();
+        $this->errors[] = "Could not load object group. load()";
+        return false;
+      }
+
+      if(isset($this->results_json) && (array_key_exists('error', $this->results_json )) ) {
+        if(is_array($this->results_json['error'])) {
+          $this->errors[] = $this->results_json['error'];
         }
-
-        $this->uri = $uri;
-        $service = 'ogmt/v1.0/adminogmt/getObjectGroup.htm';
-        if(false == $adminView) {
-          $service = 'ogmt/v1.0/ogmt/getObjectGroup.htm';
+        else {
+          $this->errors[] = $this->results_json['error'];
         }
-        $params = array(
-          'objectGroupUrl' => $uri,
-        );
+        return false;
+      }
 
-        // load the object group if we have an objectGroupId
-        // call the API to get the ObjectGroup data
-        $got_object = $this->edan_connection->callEDAN($service, $params);
+      if(NULL !== $this->results_json) {
+        // set this object's properties and object list, pages and their object lists
+        //      $this->objectGroupId = $jsonobj->response->objectGroupId;
+        // load stuff from JSON into structures we are expecting
+        $this->loadFromArray($this->results_json);
+      } // if we have results_json
 
-        $this->results_json = $this->edan_connection->getResultsJSON();
-        $this->results_info = $this->edan_connection->getResultsInfo();
-        $this->results_raw = $this->edan_connection->getResultsRaw();
+      return true;
 
-        if(!$got_object) {
-          $this->errors += $this->edan_connection->getErrors();
-          $this->errors[] = "Could not load object group. load()";
-          return false;
-        }
-
-        if(isset($this->results_json) && (array_key_exists('error', $this->results_json )) ) {
-          if(is_array($this->results_json['error'])) {
-            $this->errors[] = $this->results_json['error'];
-          }
-          else {
-            $this->errors[] = $this->results_json['error'];
-          }
-          return false;
-        }
-
-        if(NULL !== $this->results_json) {
-          // set this object's properties and object list, pages and their object lists
-          //      $this->objectGroupId = $jsonobj->response->objectGroupId;
-          // load stuff from JSON into structures we are expecting
-          $this->loadFromArray($this->results_json);
-        } // if we have results_json
-
-        return true;
-
-      } // load the object group by calling the API for data
+    } // load the object group by calling the API for data
 
     public function loadFromArray($arr, $withChildren = true) {
 
@@ -447,6 +447,9 @@ namespace EDAN\OGMT {
       if(array_key_exists('defaultPage',$arr) ) {
         $this->defaultPageId = $arr['defaultPage'];
       }
+      if(array_key_exists('defaultPageId', $arr) ) {
+        $this->defaultPageId = $arr['defaultPageId'];
+      }
 
       // settings - anything else in this list of values?
       $this->disableMenu = 0;
@@ -462,14 +465,6 @@ namespace EDAN\OGMT {
           $this->objectGroupImageUri = $feature_array['url'];
         }
       } // if we have a feature
-
-      if(array_key_exists('groupType', $arr)) {
-        $this->groupType = $arr['groupType'];
-      }
-
-      if(array_key_exists('defaultPageId', $arr) ) {
-        $this->defaultPageId = $arr['defaultPageId'];
-      }
 
       if($withChildren) {
         /*
@@ -561,7 +556,7 @@ namespace EDAN\OGMT {
       return $menu;
     }
 
-      public function setMenu($pageIds = NULL) {
+    public function setMenu($pageIds = NULL) {
 
       $this->errors = array();
 
@@ -722,7 +717,8 @@ namespace EDAN\OGMT {
       $params['url'] = $this->uri;
       $params['description'] = $this->body;
       $params['keywords'] = $this->keywords;
-      if(NULL !== $this->groupType) { $params['groupType'] = $this->groupType; }
+      $groupType = (NULL == $this->groupType) ? -1 : $this->groupType;
+      $params['groupType'] = $groupType;
       $publishedValue = (true == $this->published) ? 0 : 1;
       $params['published'] = (true == $this->deleted) ? -1 : ($publishedValue);
       $params['featured'] = $this->featured;
@@ -1512,6 +1508,10 @@ namespace EDAN\OGMT {
         action  (add,remove,move,review,clear) -defaults to review
         afterId (after what record_id)--used in move
       */
+      $this->size = 0;
+      $this->items = array();
+      $this->queryTerms = NULL;
+      $this->queryFacets = array();
 
       $got_object = $this->edan_connection->callEDAN($service, $params);
 
@@ -1531,14 +1531,15 @@ namespace EDAN\OGMT {
       }
 
       // get values from $got_object
-        if(is_array($this->results_json)
-          && (
-            array_key_exists('lists', $this->results_json)
-            || array_key_exists('items', $this->results_json)
-          )
-        ) {
-      $this->loadFromArray($this->results_json, $this->objectGroupId, $this->pageId);
-        }
+      if(is_array($this->results_json)
+        && (
+          array_key_exists('lists', $this->results_json)
+          || array_key_exists('items', $this->results_json)
+        )
+      ) {
+
+        $this->loadFromArray($this->results_json, $this->objectGroupId, $this->pageId);
+      }
 
       return true;
 
@@ -1716,7 +1717,7 @@ namespace EDAN\OGMT {
         // action=modifyType will return 404 if the list doesn't exist yet
         // so we can't test for a return value
         $this->modifyType(0);
-		$this->listType = 0;
+		    $this->listType = 0;
       }
 
       $this->errors = array(); // @todo- only ignore 404
