@@ -9,6 +9,8 @@
   namespace EDAN {
 
     class EDANInterface {
+      // this class actually generates the call to the API
+
       private $server;
       private $app_id;
       private $edan_key;
@@ -20,13 +22,12 @@
        * 2 for password based (unused)
        */
       private $auth_type = 1;
-
       /**
        * Bool tracks whether the request was successful based on response header (200 = success)
        */
       private $valid_request = FALSE;
-
       public $result_format = 'json';
+      private $results;
 
       /**
        * Constructor
@@ -40,6 +41,9 @@
         if ($auth_type == 0 || $auth_type == '0') {
           $this->auth_type = 0;
         }
+
+        $this->result_format = 'json';
+        $this->valid_request = FALSE;
       }
 
       /**
@@ -75,26 +79,56 @@
        * @param service The service name you are curling {metadataService,tagService,collectService}
        * @param POST boolean, defaults to false; on true $uri sent CURLOPT_POSTFIELDS
        * @param info reference, if passed will be set with the output of curl_getinfo
-       */
+     */
       public function sendRequest($uri, $service, $POST = FALSE, &$info) {
-        $ch = curl_init();
 
-        if ($POST === TRUE) {
-          curl_setopt($ch, CURLOPT_URL, $this->server . $service);
-          curl_setopt($ch, CURLOPT_POST, 1);
-          //curl_setopt($ch, CURLOPT_POSTFIELDS, $uri);
-          curl_setopt($ch, CURLOPT_POSTFIELDS, "encodedRequest=" . base64_encode($uri));
-        } else {
-          curl_setopt($ch, CURLOPT_URL, $this->server . $service . '?' . $uri);
-        }
+      // Hash the request for tracking/profiling/caching
+      $hash = md5($uri . $service . $POST);
 
-        curl_setopt($ch, CURLOPT_HEADER, 0);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $this->encodeHeader($uri));
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        curl_setopt($ch, CURLINFO_HEADER_OUT, 1);
+      if (isset($GLOBALS['edan_hashes'][$hash])) {
+        //if (EDAN_CONNECTION_PROFILE == TRUE)  {
+          $GLOBALS['edan_connections'][] = array(
+            'request' => $service . '?' . $uri,
+            'info' => array(
+              'total_time' => 'cached',
+              'namelookup_time' => 0,
+              'connect_time' => 0,
+              'pretransfer_time' => 0
+            )
+          );
+        //}
 
-        $response = curl_exec($ch);
-        $info = curl_getinfo($ch);
+        return $GLOBALS['edan_hashes'][$hash];
+      }
+
+      $ch = curl_init();
+
+      if ($POST === TRUE) {
+        curl_setopt($ch, CURLOPT_URL, $this->server . $service);
+        curl_setopt($ch, CURLOPT_POST, 1);
+        //curl_setopt($ch, CURLOPT_POSTFIELDS, $uri);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, "encodedRequest=" . base64_encode($uri));
+      } else {
+        curl_setopt($ch, CURLOPT_URL, $this->server . $service . '?' . $uri);
+      }
+
+      curl_setopt($ch, CURLOPT_HEADER, 0);
+      curl_setopt($ch, CURLOPT_HTTPHEADER, $this->encodeHeader($uri));
+      curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+      curl_setopt($ch, CURLINFO_HEADER_OUT, 1);
+
+      $response = curl_exec($ch);
+      $info = curl_getinfo($ch);
+
+    // Record this request for analysis
+        /*
+    if (EDAN_CONNECTION_PROFILE == TRUE)  {
+      $GLOBALS['edan_connections'][] = array(
+        'request' => $service . '?' . $uri,
+        'info' => $info
+      );
+    }
+        */
 
         if ($info['http_code'] == 200) {
           $this->valid_request = TRUE;
@@ -103,6 +137,8 @@
         }
 
         curl_close($ch);
+
+        $GLOBALS['edan_hashes'][$hash] = $response;
 
         return $response;
       }
@@ -136,9 +172,11 @@
 
         return $prefix.$password;
       }
+
     }
 
     abstract class EDANBase {
+      // basic properties, extended by OGMT and other classes
 
       protected $edan_connection;
       protected $errors;
@@ -146,7 +184,7 @@
       protected $results_json;
       protected $results_info;
 
-      public function setConnection(EDANConnection &$edan_connection) {
+      public function setConnection(Connection &$edan_connection) {
         $this->edan_connection = $edan_connection;
       }
 
@@ -168,9 +206,9 @@
 
     } // EDANBase
 
-    // so we don't have to continually pass connection params to EDANObjectGroup objects-
-    // we can just create one EDANConnection and pass this connection object when making calls
     class Connection extends EDANBase {
+      // so we don't have to continually pass connection params to EDANObjectGroup objects-
+      // we can just create one EDANConnection and pass this connection object when making calls
 
       private $edan_app_id;
       private $edan_auth_key;
@@ -231,21 +269,21 @@
           $this->errors[] = "Format is invalid for EDAN Server: '" . $edan_server. "'." ;
         }
 
-        if($this->_check_server($edan_tier_type)) {
+        if($this->_check_tier_type($edan_tier_type)) {
           $this->edan_tier_type = $edan_tier_type;
         }
         else {
           $this->errors[] = "EDAN Tier Type is invalid: '" . $edan_tier_type. "'." ;
         }
 
-        if($this->_check_server($edan_app_id)) {
+        if($this->_check_app_id($edan_app_id)) {
           $this->edan_app_id = $edan_app_id;
         }
         else {
           $this->errors[] = "EDAN App ID is invalid: '" . $edan_app_id. "'." ;
         }
 
-        if($this->_check_server($edan_auth_key)) {
+        if($this->_check_auth_key($edan_auth_key)) {
           $this->edan_auth_key = $edan_auth_key;
         }
         else {
@@ -277,9 +315,15 @@
         if(NULL !== $params) {
           // Add the appid to the request string
           //$params['applicationId'] = $edan_app_id;
-          array_unshift($params, array('applicationId' => $this->edan_app_id));
+          if(!array_key_exists('applicationId', $params)) {
+            array_unshift($params, array('applicationId' => $this->edan_app_id));
+          }
           $uri = local_http_build_query($params);
         }
+        /*elseif(count($params) == 0) {
+          $params = array('applicationId' => $this->edan_app_id);
+          $uri = local_http_build_query($params);
+        }*/
         else {
           $uri = '';
         }
@@ -289,7 +333,6 @@
         $edan = new EDANInterface($this->edan_server, $this->edan_app_id, $this->edan_auth_key, $this->edan_tier_type);
 
         $info = '';
-
         $results = $edan->sendRequest($uri, $service, $post, $info);
         $this->results_raw = $results;
         $this->results_info = $info;
@@ -297,18 +340,18 @@
 //dpm($service . '?' . $uri);
 /*
 dpm("---------------");
-dpm("OGMT CALL");
 dpm($service . '?' . $uri);
 if($service != 'ogmt/v1.0/ogmt/objectgroups.htm'
   && $service != 'ogmt/v1.0/adminogmt/getObjectGroups.htm'
   && $service != 'ogmt/v1.0/adminogmt/objectListingMetadata.htm'
   && $service != 'ogmt/v1.0/adminogmt/objectgroups.htm') {
-dpm($results);
+    dpm($results);
 }
 dpm("INFO:");
 dpm($info);
 */
-        if (!array_key_exists('http_code', $info)) {
+
+        if ((!is_array($info) && strlen(trim($info)) == 0) || !array_key_exists('http_code', $info)) {
           $this->errors[] = "EDAN did not return a HTTP code.";
           return FALSE;
         }
@@ -347,8 +390,7 @@ dpm($info);
         return $app_id;
       }
 
-    } // EDANConnection
-
+    } // Connection
 
     // thank you Drupal
     // drupal_http_build_query()
