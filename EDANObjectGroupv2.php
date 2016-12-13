@@ -130,9 +130,9 @@ namespace EDAN\OGMT {
         $params['groupType'] = $groupType;
       }
 
-      $service = 'ogmt/v1.0/adminogmt/getObjectGroups.htm';
+      $service = 'ogmt/v1.1/adminogmt/getObjectGroups.htm'; // admin endpoint
       if(false == $adminView) {
-        $service = 'ogmt/v1.0/ogmt/getObjectGroups.htm';
+        $service = 'ogmt/v1.1/ogmt/getObjectGroups.htm'; // public endpoint, but only shows stories for this unit- based on app id
       }
 
       // call the API to get the ObjectGroups data
@@ -191,6 +191,7 @@ namespace EDAN\OGMT {
   class ObjectGroup extends \EDAN\EDANBase {
 
     protected $objectGroupId;
+    protected $ogAppId;
     protected $deleted; // true or false
 
     public $objectGroupPages;
@@ -199,6 +200,11 @@ namespace EDAN\OGMT {
     public $title;
     public $body;
     public $objectGroupImageUri;
+    public $objectGroupImageThumbnailUri;
+    public $objectGroupImageAlt;
+    public $objectGroupImageHTML;
+    public $objectGroupMedia;
+
     public $listTitle;
     public $uri;
     public $groupType;
@@ -211,7 +217,7 @@ namespace EDAN\OGMT {
     public $objectList;
     public $adminView; // true or false
 
-    public function __construct( $edan_connection = NULL, $objectGroupId = NULL, $adminView = true) {
+    public function __construct( $edan_connection = NULL, $objectGroupId = NULL, $adminView = true, $theHardWay = false) {
 
       // set defaults
       $this->objectGroupId = NULL;
@@ -231,6 +237,11 @@ namespace EDAN\OGMT {
       $this->listTitle = '';
       $this->body = '';
       $this->objectGroupImageUri = '';
+      $this->objectGroupImageThumbnailUri = '';
+      $this->objectGroupImageAlt = '';
+      $this->objectGroupImageHTML = '';
+      $this->objectGroupMedia = '';
+
       $this->uri = '';
       $this->groupType = NULL;
       $this->keywords = '';
@@ -240,6 +251,7 @@ namespace EDAN\OGMT {
       $this->disableMenu = false;
       $this->tokenId = '';
       $this->settings = array();
+      $this->ogAppId = NULL;
 
       $this->adminView = (false == $adminView) ? false : true;
 
@@ -249,6 +261,10 @@ namespace EDAN\OGMT {
 
       if(null == $objectGroupId) {
         // this is a new object; don't talk to the API yet
+        // just init the app id
+        if(NULL !== $this->edan_connection) {
+          $this->ogAppId = $this->getAppId();
+        }
       }
       else {
         // hit the API to get this object group
@@ -257,7 +273,9 @@ namespace EDAN\OGMT {
             . $objectGroupId . "'.";
         }
         else { // we have an EDAN connection
-          if(!$this->load($objectGroupId, $adminView)) {
+          // default
+          $this->ogAppId = $this->getAppId();
+          if(!$this->load($objectGroupId, $adminView, $theHardWay)) {
             $this->errors[] = 'Object Group was not loaded.';
           }
         }
@@ -278,6 +296,10 @@ namespace EDAN\OGMT {
       return $app_id;
     }
 
+    public function getOGAppId() {
+      return $this->ogAppId;
+    }
+
     public function getErrors() {
       return $this->errors;
     }
@@ -290,8 +312,7 @@ namespace EDAN\OGMT {
       $this->objectGroupId = $objectGroupId;
     }
 
-    public function load($objectGroupId, $adminView = true) {
-      //@todo test $objectGroupId for expected pattern?
+    public function load($objectGroupId, $adminView = true, $theHardWay = false) {
 
       $this->errors = array();
 
@@ -301,13 +322,21 @@ namespace EDAN\OGMT {
       }
 
       $this->objectGroupId = $objectGroupId;
-      $service = 'ogmt/v1.0/adminogmt/getObjectGroup.htm';
-      if(false == $adminView) {
-        $service = 'ogmt/v1.0/ogmt/getObjectGroup.htm';
-      }
       $params = array(
         'objectGroupId' => $objectGroupId,
       );
+
+      $service = 'ogmt/v1.1/adminogmt/getObjectGroup.htm';
+      if(false == $adminView) {
+        $service = 'ogmt/v1.1/ogmt/getObjectGroup.htm';
+      }
+      if(true == $theHardWay) {
+        $service = 'content/v1.1/content/getContent.htm';
+      $params = array(
+          'id' => $objectGroupId,
+      );
+
+      }
 
       // load the object group if we have an objectGroupId
       // call the API to get the ObjectGroup data
@@ -337,15 +366,14 @@ namespace EDAN\OGMT {
         // set this object's properties and object list, pages and their object lists
         //      $this->objectGroupId = $jsonobj->response->objectGroupId;
         // load stuff from JSON into structures we are expecting
-        $this->loadFromArray($this->results_json);
-
+        $this->loadFromArray($this->results_json, true, $theHardWay);
       } // if we have results_json
 
       return true;
 
     } // load the object group by calling the API for data
 
-    public function loadByUri($uri, $adminView = true) {
+    public function loadByUri($uri, $adminView = true, $theHardWay = false) {
       //@todo test $uri for expected pattern
 
       $this->errors = array();
@@ -356,15 +384,23 @@ namespace EDAN\OGMT {
       }
 
       $this->uri = $uri;
-      $service = 'ogmt/v1.0/adminogmt/getObjectGroup.htm';
+
+      $service = 'ogmt/v1.1/adminogmt/getObjectGroup.htm';
       if(false == $adminView) {
-        $service = 'ogmt/v1.0/ogmt/getObjectGroup.htm';
+        $service = 'ogmt/v1.1/ogmt/getObjectGroup.htm';
       }
       $params = array(
-        'objectGroupUrl' => $uri,
+        'objectGroupUrl' => 'objectgroup:' . $uri,
       );
 
-      // load the object group if we have an objectGroupId
+      if(true == $theHardWay) {
+        $service = 'content/v1.1/content/getContent.htm';
+        $params = array(
+          'url' => 'objectgroup:' . $uri,
+      );
+      }
+
+      // load the object group if we have an uri
       // call the API to get the ObjectGroup data
       $got_object = $this->edan_connection->callEDAN($service, $params);
 
@@ -389,19 +425,141 @@ namespace EDAN\OGMT {
       }
 
       if(NULL !== $this->results_json) {
+        if(true == $theHardWay) {
+          $this->objectGroupId = $this->results_json['id'];
+        }
+
         // set this object's properties and object list, pages and their object lists
         //      $this->objectGroupId = $jsonobj->response->objectGroupId;
         // load stuff from JSON into structures we are expecting
-        $this->loadFromArray($this->results_json);
+        $this->loadFromArray($this->results_json, true, $theHardWay);
       } // if we have results_json
 
       return true;
 
     } // load the object group by calling the API for data
 
-    public function loadFromArray($arr, $withChildren = true) {
+    public function loadFromArray($arr, $withChildren = true, $theHardWay = false) {
+
+      $_app_id = NULL;
+      $unit_code = '';
+
+      if($theHardWay) {
+        if(isset($arr['unitCode'])) {
+          $unit_code = $arr['unitCode'];
+          $this->ogAppId = _get_applicationId_from_unitCode($unit_code);
+          $_app_id = $this->ogAppId;
+        }
 
       if(array_key_exists('objectGroupId', $arr)) {
+          $this->objectGroupId = $arr['id'];
+        }
+        if(array_key_exists('title', $arr)) {
+          $this->title = $arr['content']['title'];
+        }
+        if(array_key_exists('listTitle', $arr['content'])) {
+          $this->listTitle = $arr['content']['listTitle'];
+        }
+        if(array_key_exists('description', $arr['content'])) {
+          $this->body = $arr['content']['description'];
+        }
+        if(array_key_exists('url', $arr)) {
+          $this->uri = str_replace('objectgroup:', '', $arr['url']);
+        }
+        if(array_key_exists('groupType', $arr['content'])) {
+          $this->groupType = $arr['content']['groupType'];
+        }
+        if(array_key_exists('keywords', $arr['content'])) {
+          $this->keywords = $arr['content']['keywords'];
+        }
+        // incoming published value is: -1 for deleted, 1 for published, 0 for un-published
+        if(array_key_exists('published', $arr['content'])) {
+          if($arr['content']['published'] == -1) {
+            $this->deleted = true;
+            $this->published = false;
+          }
+          elseif($arr['content']['published'] == 1) { // published = 1 means un-published in this version of the API
+            $this->published = false;
+          }
+          else {
+            $this->published = true;
+          }
+          // the default for published is true
+        }
+        if(array_key_exists('featured', $arr['content'])) {
+          $this->featured = $arr['content']['featured'] == 1 ? true : false;
+        }
+
+        if(array_key_exists('page',$arr['content']) ) {
+          $this->page = $arr['content']['page'];
+        }
+
+        if(array_key_exists('defaultPage',$arr['content']) ) {
+          $this->defaultPageId = $arr['content']['defaultPage'];
+        }
+        if(array_key_exists('defaultPageId', $arr['content']) ) {
+          $this->defaultPageId = $arr['content']['defaultPageId'];
+        }
+
+        // settings - anything else in this list of values?
+        $this->disableMenu = 0;
+        if(array_key_exists('settings',$arr['content']) && array_key_exists('disableMenu', $arr['content']['settings'])) {
+          $this->settings = $arr['content']['settings'];
+          $this->disableMenu = $this->settings['disableMenu']; // controls whether the menu appears on the object group pages
+        }
+
+        // objectGroupImageUri get this from "feature": { "type": "image", "url": "" }
+        if(array_key_exists('feature', $arr['content'])) {
+          $feature_array = $arr['content']['feature'];
+          if(array_key_exists('url', $feature_array)) {
+            $this->objectGroupImageUri = $feature_array['url'];
+          }
+          elseif(array_key_exists('media', $feature_array)) {
+            $this->objectGroupMedia = $feature_array['media'];
+          }
+          if(array_key_exists('thumbnail', $feature_array)) {
+            $this->objectGroupImageThumbnailUri = $feature_array['thumbnail'];
+          }
+          if(array_key_exists('alt', $feature_array)) {
+            $this->objectGroupImageAlt = $feature_array['alt'];
+          }
+          if(array_key_exists('html', $feature_array)) {
+            $this->objectGroupImageHTML = $feature_array['html'];
+          }
+        } // if we have a feature
+
+        if($withChildren) {
+          /*
+           * objects - list of items, or a list of search params
+           * list of items looks like:
+           * "objects": { "listType": 0, "size": 1, "listName": "QUOTIENTTEST:dpt-1445611947110-1445638605523-0:0", "items": [ "siris_sil_960883" ] }
+           */
+          $obj_list = new ObjectList(NULL, $this->edan_connection, $this->objectGroupId, NULL, $_app_id);
+          if(is_object($obj_list)) {
+            $this->objectList = $obj_list;
+          }
+
+          // array of key-value pairs representing pages
+          /* looks like this:
+           * "menu": [ { "id": "dpt-1445611947110-1445638793497-0", "url": "jk7rgecnejhzkug9zxiwgf9xe79hzv0hck5ams8e", "title": "jK7RGECnEJHzkug9zxIWGF9XE79hZV0Hck5amS8E" } ]
+          */
+
+          //@RB todo- we may have to pass something additional here to get the OG page
+          if(array_key_exists('content', $arr) && array_key_exists('menu', $arr['content'])) {
+            foreach($arr['content']['menu'] as $key => $pageId) {
+              $newp = new ObjectGroupPage(NULL, $this->edan_connection, $this->objectGroupId, $pageId, $theHardWay, $unit_code);
+              $newp->setObjectGroupId($this->objectGroupId);
+
+              $this->objectGroupPages[$key] = $newp;
+            } // for each menu object, create a page and add to this object group's pages
+          } // load pages from menu
+
+        } // if loading the og with children - meaning object listing and pages
+
+
+      } // the hard way- we have content from getContent.htm
+      else { // default/easy way: we have content from getObjectGroup.htm
+        if(array_key_exists('objectGroupId', $arr)) {
         $this->objectGroupId = $arr['objectGroupId'];
       }
       if(array_key_exists('title', $arr)) {
@@ -458,12 +616,24 @@ namespace EDAN\OGMT {
         $this->disableMenu = $this->settings['disableMenu']; // controls whether the menu appears on the object group pages
       }
 
-      // objectGroupImageUri - "feature": { "type": "image", "url": "" }
+        // objectGroupImageUri get this from "feature": { "type": "image", "url": "" }
       if(array_key_exists('feature', $arr)) {
         $feature_array = $arr['feature'];
         if(array_key_exists('url', $feature_array)) {
           $this->objectGroupImageUri = $feature_array['url'];
         }
+          elseif(array_key_exists('media', $feature_array)) {
+            $this->objectGroupMedia = $feature_array['media'];
+          }
+          if(array_key_exists('thumbnail', $feature_array)) {
+            $this->objectGroupImageThumbnailUri = $feature_array['thumbnail'];
+          }
+          if(array_key_exists('alt', $feature_array)) {
+            $this->objectGroupImageAlt = $feature_array['alt'];
+          }
+          if(array_key_exists('html', $feature_array)) {
+            $this->objectGroupImageHTML = $feature_array['html'];
+          }
       } // if we have a feature
 
       if($withChildren) {
@@ -504,7 +674,7 @@ namespace EDAN\OGMT {
 
       } // if loading the og with children - meaning object listing and pages
 
-
+      } // load content from array of data provided by getObjectGroup.htm
 
     } // load the object group with the values provided in $arr parameter
 
@@ -519,10 +689,13 @@ namespace EDAN\OGMT {
       }
 
       $params = array();
-      $service = 'ogmt/v1.0/adminogmt/setDefaultPage.htm';
+      $service = 'ogmt/v1.1/adminogmt/setDefaultPage.htm';
 
       $params['objectGroupId'] = $this->objectGroupId;
+      // we might have a blank page Id, used to un-set the default page:
+      if(isset($pageId) && strlen(trim($pageId)) > 0) {
         $params['pageId'] = $pageId;
+      }
 
       // save the object group
       $got_object = $this->edan_connection->callEDAN($service, $params);
@@ -551,7 +724,12 @@ namespace EDAN\OGMT {
       // returns a simple array of the page IDs
       $menu = array();
       foreach($this->objectGroupPages as $key => $pg) {
-        $menu[] = $pg->getPageId();
+        $menu[$pg->getPageId()] = array(
+          'pageId' => $pg->getPageId(),
+          'title' => $pg->title,
+          'listTitle' => $pg->listTitle,
+          'is_default' => ($pg->getPageId() == $this->defaultPageId) ? true : false,
+        );
       }
       return $menu;
     }
@@ -566,7 +744,7 @@ namespace EDAN\OGMT {
       }
 
       $params = array();
-      $service = 'ogmt/v1.0/adminogmt/setMenu.htm';
+      $service = 'ogmt/v1.1/adminogmt/setMenu.htm';
 
       $params['objectGroupId'] = $this->objectGroupId;
       $pages = array();
@@ -636,55 +814,6 @@ namespace EDAN\OGMT {
         // not used in existing modules
     }
 
-    public function getToken() {
-
-      $this->errors = array();
-      $this->tokenId = '';
-
-      // do we have edan?
-      if(NULL == $this->edan_connection || !is_object($this->edan_connection)) {
-        $this->errors[] = 'Cannot save Object Group. No EDAN connection set. save().';
-        return false;
-      }
-
-      $params = array();
-      $service = 'content/v1.0/fileupload/tokenRequest.htm';
-
-      // save the object group
-      $got_token = $this->edan_connection->callEDAN($service, $params);
-
-      $this->results_json = $this->edan_connection->getResultsJSON();
-      $this->results_info = $this->edan_connection->getResultsInfo();
-      $this->results_raw = $this->edan_connection->getResultsRaw();
-
-      if(!$got_token) {
-        $this->errors += $this->edan_connection->getErrors();
-        $this->errors[] = 'No token retrieved from EDAN. getToken()';
-        return false;
-      }
-
-      // if this is a new object group, see if we got the id back
-      /*
-      {
-        "tokenId": "72c2d683-e41a-4de3-81b3-5d0297d1827d",
-        "message": "token valid for 5 minutes.."
-      }
-      */
-      if (array_key_exists('tokenId', $this->results_json)) {
-        $this->tokenId = $this->results_json['tokenId'];
-      }
-      else {
-        $this->errors[] = 'Unable to get token. No tokenId found in response. getToken()';
-        if(isset($this->results_json) && array_key_exists('error', $this->results_json )) {
-          $this->errors[] = $this->edan_connection['errors'];
-          return false;
-        }
-      }
-
-      return true;
-
-    }
-
     public function save() {
       // save the current values of this object group using API call
 
@@ -701,11 +830,11 @@ namespace EDAN\OGMT {
 
       $params = array();
 
-      $service = 'ogmt/v1.0/adminogmt/editObjectGroup.htm';
+      $service = 'ogmt/v1.1/adminogmt/editObjectGroup.htm';
 
       // different endpoint for creating a new Object Group
       if(NULL == $this->objectGroupId) {
-        $service = 'ogmt/v1.0/adminogmt/createObjectGroup.htm';
+        $service = 'ogmt/v1.1/adminogmt/createObjectGroup.htm';
       }
       else {
         $params['objectGroupId'] = $this->objectGroupId;
@@ -726,9 +855,26 @@ namespace EDAN\OGMT {
       // objectGroupImageUri - "feature": { "type": "image", "url": "" }
       //@todo ref Slack convo with Andrew 12/17/2015 and his notes from 7/2/2015
       // properties stored in feature include: type, thumbnail, image, alt, html
-      $feature_array = array('type' => 'image', 'url' => '');
+      $feature_array = array('type' => 'image', 'url' => '', 'alt' => '', 'html' => '');
+      $has_image = false;
       if(isset($this->objectGroupImageUri) && strlen($this->objectGroupImageUri) > 0) {
         $feature_array['url'] = $this->objectGroupImageUri;
+        $has_image = true;
+      }
+      if(isset($this->objectGroupMedia) && strlen($this->objectGroupMedia) > 0) {
+        $feature_array['media'] = $this->objectGroupMedia;
+        $has_image = true;
+      }
+      //@todo- thumbnail
+      if(isset($this->objectGroupImageAlt) && strlen($this->objectGroupImageAlt) > 0) {
+        $feature_array['alt'] = $this->objectGroupImageAlt;
+        $has_image = true;
+      }
+      if(isset($this->objectGroupImageHTML) && strlen($this->objectGroupImageHTML) > 0) {
+        $feature_array['html'] = $this->objectGroupImageHTML;
+        $has_image = true;
+      }
+      if($has_image) {
         $params['feature'] = json_encode($feature_array);
       }
 
@@ -791,7 +937,7 @@ namespace EDAN\OGMT {
       }
 
       $params = array();
-      $service = 'ogmt/v1.0/adminogmt/releaseObjectGroup.htm';
+      $service = 'ogmt/v1.1/adminogmt/releaseObjectGroup.htm';
       $params['objectGroupId'] = $this->objectGroupId;
 
       $got_object = $this->edan_connection->callEDAN($service, $params);
@@ -881,7 +1027,7 @@ namespace EDAN\OGMT {
       }
 
       $params = array();
-      $service = 'ogmt/v1.0/adminogmt/releasePage.htm';
+      $service = 'ogmt/v1.1/adminogmt/releasePage.htm';
 
       $params['objectGroupId'] = $this->objectGroupId;
       $params['pageId'] = $pageId;
@@ -926,6 +1072,7 @@ namespace EDAN\OGMT {
 
     protected $objectGroupId;
     protected $pageId;
+    protected $ogAppId;
 
     public $edan_connection;
     public $title;
@@ -940,7 +1087,8 @@ namespace EDAN\OGMT {
 
     // given in menu as:
     //{ "id": "dpt-1445611947110-1445638793497-0", "url": "jk7rgecnejhzkug9zxiwgf9xe79hzv0hck5ams8e", "title": "jK7RGECnEJHzkug9zxIWGF9XE79hZV0Hck5amS8E" }
-    public function __construct( $arr = NULL, $edan_connection = NULL, $objectGroupId = NULL, $pageId = NULL ) {
+    public function __construct( $arr = NULL, $edan_connection = NULL, $objectGroupId = NULL, $pageId = NULL,
+                                 $theHardWay = false, $unit_code = NULL ) {
 
       $this->objectGroupId = NULL;
       $this->pageId = NULL;
@@ -949,6 +1097,7 @@ namespace EDAN\OGMT {
       $this->settings = NULL;
       $this->disableObjectListing = false;
       $this->objectList = NULL;
+      $this->ogAppId = NULL;
 
       if(NULL !== $edan_connection) {
         $this->edan_connection = $edan_connection;
@@ -958,13 +1107,30 @@ namespace EDAN\OGMT {
         $this->objectGroupId = $objectGroupId;
       }
       if(NULL !== $arr && is_array($arr)) {
-        $this->loadFromArray($arr);
+        $this->loadFromArray($arr, $theHardWay);
       }
       elseif(NULL !== $edan_connection && NULL !== $objectGroupId && NULL !== $pageId) {
-        //@todo test objectGroupId, pageId for malicious stuff
+        // default
+        $this->ogAppId = $this->getAppId();
+
         $this->edan_connection = $edan_connection;
-        $this->load($objectGroupId, $pageId);
+        $this->load($objectGroupId, $pageId, $theHardWay, $unit_code);
       }
+    }
+
+    public function getAppId() {
+      $app_id = '';
+      if(NULL !== $this->edan_connection) {
+        if(NULL !== $this->edan_connection->getAppId()) {
+          $app_id = $this->edan_connection->getAppId();
+        }
+      }
+
+      return $app_id;
+    }
+
+    public function getOGAppId() {
+      return $this->ogAppId;
     }
 
     public function getObjectGroupId() {
@@ -987,6 +1153,11 @@ namespace EDAN\OGMT {
     public function load($objectGroupId, $pageId) {
 
       $this->errors = array();
+      $_app_id = NULL;
+      if(NULL !== $unit_code) {
+        $this->ogAppId = _get_applicationId_from_unitCode($unit_code);
+        $_app_id = $this->ogAppId;
+      }
 
       if(NULL == $this->edan_connection || !is_object($this->edan_connection)) {
         $this->errors[] = 'Cannot load Object Group Page. No EDAN connection set. _load_page.';
@@ -995,11 +1166,20 @@ namespace EDAN\OGMT {
 
       $this->objectGroupId = $objectGroupId;
       $this->pageId = $pageId;
-      $service = 'ogmt/v1.0/adminogmt/getObjectGroup.htm';
+      $service = 'ogmt/v1.1/adminogmt/getObjectGroup.htm';
       $params = array(
         'objectGroupId' => $objectGroupId,
         'pageId' => $pageId,
       );
+      if(true == $theHardWay) {
+        $service = 'content/v1.1/content/getContent.htm';
+        $params = array(
+          'id' => $pageId,
+        );
+
+        // pass the unit code- which is, perversely, the app id
+        $params['unitCode'] = $_app_id;
+      }
 
       // call the API to get the ObjectGroup page data
       $got_object = $this->edan_connection->callEDAN($service, $params);
@@ -1019,10 +1199,10 @@ namespace EDAN\OGMT {
         return false;
       }
 
-      if(NULL !== $this->results_json && array_key_exists('page', $this->results_json)) {
+      if(NULL !== $this->results_json && ($theHardWay || array_key_exists('page', $this->results_json))) {
         // set this page's properties and object list
         // load stuff from JSON into structures we are expecting
-          $this->loadFromArray($this->results_json);
+          $this->loadFromArray($this->results_json, $theHardWay);
       } // if we have results_json
       else {
         $this->errors[] = 'JSON is null or no page data found. load()';
@@ -1033,9 +1213,91 @@ namespace EDAN\OGMT {
 
     } // load the page by calling the API for data
 
-    public function loadFromArray($arr) {
+    public function loadFromArray($arr, $theHardWay = false) {
       $this->errors = array();
 
+      $_app_id = NULL;
+      // temp
+      $withChildren = true;
+
+      if($theHardWay) {
+        if(isset($arr['unitCode'])) {
+          $unit_code = $arr['unitCode'];
+          $this->ogAppId = _get_applicationId_from_unitCode($unit_code);
+          $_app_id = $this->ogAppId;
+        }
+
+        if(array_key_exists('objectGroupId', $arr)) {
+          $this->objectGroupId = $arr['id'];
+        }
+        if(array_key_exists('id', $arr)) {
+          $this->pageId = $arr['id'];
+        }
+
+        if(array_key_exists('title', $arr)) {
+          $this->title = $arr['content']['title'];
+        }
+        if(array_key_exists('listTitle', $arr['content'])) {
+          $this->listTitle = $arr['content']['listTitle'];
+        }
+        if(array_key_exists('content', $arr['content'])) {
+          $this->content = $arr['content']['content'];
+        }
+        if(array_key_exists('url', $arr)) {
+          $this->uri = str_replace('page:', '', $arr['url']);
+        }
+        if(array_key_exists('groupType', $arr['content'])) {
+          $this->groupType = $arr['content']['groupType'];
+        }
+        if(array_key_exists('keywords', $arr['content'])) {
+          $this->keywords = $arr['content']['keywords'];
+        }
+        if(array_key_exists('featured', $arr['content'])) {
+          $this->featured = $arr['content']['featured'] == 1 ? true : false;
+        }
+
+        // settings - anything else in this list of values?
+        $this->disableMenu = 0;
+        if(array_key_exists('settings',$arr['content']) && array_key_exists('disableMenu', $arr['content']['settings'])) {
+          $this->settings = $arr['content']['settings'];
+          $this->disableMenu = $this->settings['disableMenu']; // controls whether the menu appears on the object group pages
+        }
+
+        // objectGroupImageUri get this from "feature": { "type": "image", "url": "" }
+        if(array_key_exists('feature', $arr['content'])) {
+          $feature_array = $arr['content']['feature'];
+          if(array_key_exists('url', $feature_array)) {
+            $this->objectGroupImageUri = $feature_array['url'];
+          }
+          elseif(array_key_exists('media', $feature_array)) {
+            $this->objectGroupMedia = $feature_array['media'];
+          }
+          if(array_key_exists('thumbnail', $feature_array)) {
+            $this->objectGroupImageThumbnailUri = $feature_array['thumbnail'];
+          }
+          if(array_key_exists('alt', $feature_array)) {
+            $this->objectGroupImageAlt = $feature_array['alt'];
+          }
+          if(array_key_exists('html', $feature_array)) {
+            $this->objectGroupImageHTML = $feature_array['html'];
+          }
+        } // if we have a feature
+
+        if($withChildren) {
+          /*
+           * objects - list of items, or a list of search params
+           * list of items looks like:
+           * "objects": { "listType": 0, "size": 1, "listName": "QUOTIENTTEST:dpt-1445611947110-1445638605523-0:0", "items": [ "siris_sil_960883" ] }
+           */
+          $obj_list = new ObjectList(NULL, $this->edan_connection, $this->objectGroupId, $this->pageId, $_app_id);
+          if(is_object($obj_list)) {
+            $this->objectList = $obj_list;
+          }
+
+        } // if loading the og with children - meaning object listing and pages
+
+      } // theHardWay
+      else {
         if(array_key_exists('objectGroupId', $arr['page'])) {
           $this->objectGroupId = $arr['page']['objectGroupId'];
       }
@@ -1070,7 +1332,7 @@ namespace EDAN\OGMT {
 
       // we have to make another call to get the object listing metadata for a page
       if(array_key_exists('objects', $arr) ) {
-        $obj_list = new ObjectList($arr['objects'], $this->edan_connection, $this->objectGroupId, $this->pageId);
+          $obj_list = new ObjectList($arr['objects'], $this->edan_connection, $this->objectGroupId, $this->pageId, $_app_id);
         if(is_object($obj_list)) {
           $this->objectList = $obj_list;
         }
@@ -1078,6 +1340,7 @@ namespace EDAN\OGMT {
       else {
         $this->objectList = NULL;
       }
+      } // if not theHardWay
 
     }
 
@@ -1114,10 +1377,10 @@ namespace EDAN\OGMT {
         $params['settings'] = json_encode(array('disableObjects' => (int)$this->disableObjectListing));
       }
 
-      $service = 'ogmt/v1.0/adminogmt/editPage.htm';
+      $service = 'ogmt/v1.1/adminogmt/editPage.htm';
       if(NULL == $this->pageId) {
         // add a page to this group using API call
-        $service = 'ogmt/v1.0/adminogmt/createPage.htm';
+        $service = 'ogmt/v1.1/adminogmt/createPage.htm';
       }
       else {
         // save changes to an existing page
@@ -1171,7 +1434,7 @@ namespace EDAN\OGMT {
     public $queryFacets; // array of facets
     public $settings;
 
-    public function __construct( $arr = NULL, $edan_connection, $objectGroupId = NULL, $pageId = NULL) {
+    public function __construct( $arr = NULL, $edan_connection, $objectGroupId = NULL, $pageId = NULL, $_app_id = NULL) {
 
       $this->objectGroupId = $this->pageId = null;
       $this->listName = '';
@@ -1193,11 +1456,11 @@ namespace EDAN\OGMT {
           }
 
         if(NULL !== $arr && is_array($arr)) {
-          $this->loadFromArray($arr, $objectGroupId, $pageId);
+          $this->loadFromArray($arr, $objectGroupId, $pageId, $_app_id);
         } // if we have an object
         elseif(NULL !== $edan_connection) {
           // otherwise if we have at least $objectGroupId and a connection we can load the object list using the API call:
-          $this->load();
+          $this->load($_app_id);
         }
 
       } // can't do anything without an objectGroupId
@@ -1232,6 +1495,11 @@ namespace EDAN\OGMT {
           return false;
       }
 
+      $bHaveItems = true;
+      $bHaveSearch = true;
+      $param_items_array = array();
+      $param_items = '';
+
         // items should be an array of item ids
       if(NULL !== $items) {
           if(is_array($items)) {
@@ -1242,22 +1510,17 @@ namespace EDAN\OGMT {
           }
       }
 
-      $bHaveItems = true;
-      $bHaveSearch = true;
-      $param_items_array = array();
-      $param_items = '';
-
         if(NULL == $this->items
           || (is_array($this->items) && count($this->items) == 0)
           || (!is_array($this->items) && strlen($this->items == 0) )) {
         $bHaveItems = false;
       }
       else {
-        if(count($this->items) > 1) {
+        if(count($this->items) > 0  ) {
           $param_items = json_encode($this->items);
         }
         else {
-          $param_items = $this->items[0];
+          $param_items = $items;
         }
       }
 
@@ -1280,7 +1543,7 @@ namespace EDAN\OGMT {
           return false;
       }
 
-      $service = 'ogmt/v1.0/adminogmt/editObjectListing.htm';
+      $service = 'ogmt/v1.1/adminogmt/editObjectListing.htm';
       $params = array();
       $params['action'] = 'add'; //action  (add,remove,move,review,clear) -defaults to review
         $params['objectGroupId'] = $this->objectGroupId;
@@ -1304,7 +1567,7 @@ namespace EDAN\OGMT {
         // clear items; we'll re-load them below
         $this->items = array();
 
-      if(!$got_object) {
+      if(!$got_object || count($this->edan_connection->getErrors()) > 0) {
         $this->errors += $this->edan_connection->getErrors();
         $this->errors[] = "Could not add items to object list. addItems()";
         return false;
@@ -1332,7 +1595,7 @@ namespace EDAN\OGMT {
           return false;
       }
 
-      $service = 'ogmt/v1.0/adminogmt/editObjectListing.htm';
+      $service = 'ogmt/v1.1/adminogmt/editObjectListing.htm';
       $params = array();
       $params['action'] = 'remove'; //action  (add,remove,move,review,clear) -defaults to review
       $params['objectGroupId'] = $this->objectGroupId;
@@ -1380,7 +1643,7 @@ namespace EDAN\OGMT {
           return false;
       }
 
-      $service = 'ogmt/v1.0/adminogmt/editObjectListing.htm';
+      $service = 'ogmt/v1.1/adminogmt/editObjectListing.htm';
       $params = array();
       $params['action'] = 'move'; //action  (add,remove,move,review,clear) -defaults to review
       $params['objectGroupId'] = $this->objectGroupId;
@@ -1432,7 +1695,7 @@ namespace EDAN\OGMT {
           return false;
       }
 
-      $service = 'ogmt/v1.0/adminogmt/editObjectListing.htm';
+      $service = 'ogmt/v1.1/adminogmt/editObjectListing.htm';
       $params = array();
       $params['action'] = 'clear'; //action  (add,remove,move,review,clear) -defaults to review
       $params['objectGroupId'] = $this->objectGroupId;
@@ -1482,7 +1745,7 @@ namespace EDAN\OGMT {
 
     } // clear the object listing
 
-    public function load() {
+    public function load($_app_id = NULL) {
 
       if(NULL == $this->edan_connection) {
         $this->errors[] = "No EDAN connection. Cannot load object list.";
@@ -1493,12 +1756,17 @@ namespace EDAN\OGMT {
           return false;
       }
 
-      $service = 'ogmt/v1.0/adminogmt/getObjectListingMetadata.htm';
+      $service = 'ogmt/v1.1/adminogmt/getObjectListingMetadata.htm';
       $params = array();
       //$params['action'] = 'review'; // action  (add,remove,move,review,clear) -defaults to review
       $params['objectGroupId'] = $this->objectGroupId;
       if(isset($this->pageId)) {
         $params['pageId'] = $this->pageId;
+      }
+
+      if(NULL !== $_app_id) {
+        $service = 'metadata/v1.1/metadata/getObjectLists.htm';
+        $params['unitCode'] = $_app_id;
       }
 
       /*
@@ -1537,7 +1805,9 @@ namespace EDAN\OGMT {
           || array_key_exists('items', $this->results_json)
         )
       ) {
-
+        $this->loadFromArray($this->results_json, $this->objectGroupId, $this->pageId);
+      }
+      elseif (NULL !== $_app_id && isset($results_json['numFound']) && $results_json['numFound'] > 0) {
         $this->loadFromArray($this->results_json, $this->objectGroupId, $this->pageId);
       }
 
@@ -1545,7 +1815,7 @@ namespace EDAN\OGMT {
 
     } // load the object listing by calling the API
 
-    public function loadFromArray($arr, $objectGroupId, $pageId = NULL) {
+    public function loadFromArray($arr, $objectGroupId, $pageId = NULL, $_app_id = NULL) {
 
         if(!is_array($arr)) {
           return;
@@ -1562,8 +1832,8 @@ namespace EDAN\OGMT {
           $this->listName = $arr['listName'];
         }
 
-      if(array_key_exists('size', $arr)) {
-        $this->size = $arr['size'];
+      if(array_key_exists('items', $arr)) {
+        $this->size = count($arr['items']);
       }
       elseif(array_key_exists('numFound', $arr)) {
         $this->size = $arr['numFound'];
@@ -1621,7 +1891,7 @@ namespace EDAN\OGMT {
             foreach($arr['items'] as $item) {
               $this->items[] = $item;
             }
-            /* ogmt/v1.0/adminogmt/objectgroup.htm
+            /* ogmt/v1.1/adminogmt/objectgroup.htm
              * "items": [
                   "npg_S_NPG.85.20"
                 ]
@@ -1721,7 +1991,7 @@ namespace EDAN\OGMT {
       }
 
       $this->errors = array(); // @todo- only ignore 404
-      $ok = $this->addItems();
+      $ok = $this->addItems(); //@todo - $items!
       return $ok;
 
     } // save the object listing
@@ -1738,7 +2008,7 @@ namespace EDAN\OGMT {
           return false;
       }
 
-      $service = 'ogmt/v1.0/adminogmt/editObjectListing.htm';
+      $service = 'ogmt/v1.1/adminogmt/editObjectListing.htm';
       $params = array();
       $params['action'] = 'modifyType'; //action  (add,remove,move,review,clear,modifyType); defaults to review
       $params['objectGroupId'] = $this->objectGroupId;
