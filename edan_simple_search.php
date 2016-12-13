@@ -5,8 +5,10 @@ $edan_tier_type = 1;
 $edan_app_id = "YOUR_APP_ID";
 $edan_auth_key = 'YOUR_SECRET_KEY';
 
-$endpoint = "metadata/v1.0/metadata/search.htm";
-$param_data = 'applicationId=QUOTIENTPROD&q=' . urlencode('*:*') . '&fqs=' . urlencode('["unit_code:AAADCD"]');
+$endpoint = "metadata/v1.1/metadata/search.htm";
+$your_search_term = 'butterflies';
+$param_data = 'q=' . urlencode($your_search_term);
+//$param_data = 'q=' . urlencode('*:*') . '&fqs=' . urlencode('["unit_code:AAADCD"]');
 
 $POST = FALSE;
 
@@ -48,7 +50,7 @@ print("</pre>");
     $return = array(
       'X-AppId: ' . $app_id,
       'X-RequestDate: ' . $date,
-      'X-AppVersion: ' . 'EDANInterface-0.10.1'
+      'X-AppVersion: ' . 'EDANInterface-1.0.0'
     );
 
     // For signed/T2 requests
