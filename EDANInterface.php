@@ -85,22 +85,6 @@
       // Hash the request for tracking/profiling/caching
       $hash = md5($uri . $service . $POST);
 
-      if (isset($GLOBALS['edan_hashes'][$hash])) {
-        //if (EDAN_CONNECTION_PROFILE == TRUE)  {
-          $GLOBALS['edan_connections'][] = array(
-            'request' => $service . '?' . $uri,
-            'info' => array(
-              'total_time' => 'cached',
-              'namelookup_time' => 0,
-              'connect_time' => 0,
-              'pretransfer_time' => 0
-            )
-          );
-        //}
-
-        return $GLOBALS['edan_hashes'][$hash];
-      }
-
       $ch = curl_init();
 
       if ($POST === TRUE) {
@@ -313,11 +297,12 @@
         }
 
         if(NULL !== $params) {
-          // Add the appid to the request string
-          //$params['applicationId'] = $edan_app_id;
+          // RB 20161111 - AG says do not pass applicationId
+          /*
           if(!array_key_exists('applicationId', $params)) {
             array_unshift($params, array('applicationId' => $this->edan_app_id));
           }
+          */
           $uri = local_http_build_query($params);
         }
         /*elseif(count($params) == 0) {
@@ -337,19 +322,6 @@
         $this->results_raw = $results;
         $this->results_info = $info;
 
-//dpm($service . '?' . $uri);
-/*
-dpm("---------------");
-dpm($service . '?' . $uri);
-if($service != 'ogmt/v1.0/ogmt/objectgroups.htm'
-  && $service != 'ogmt/v1.0/adminogmt/getObjectGroups.htm'
-  && $service != 'ogmt/v1.0/adminogmt/objectListingMetadata.htm'
-  && $service != 'ogmt/v1.0/adminogmt/objectgroups.htm') {
-    dpm($results);
-}
-dpm("INFO:");
-dpm($info);
-*/
 
         if ((!is_array($info) && strlen(trim($info)) == 0) || !array_key_exists('http_code', $info)) {
           $this->errors[] = "EDAN did not return a HTTP code.";
@@ -388,6 +360,10 @@ dpm($info);
         }
 
         return $app_id;
+      }
+
+      public function isValid() {
+        return $this->is_valid;
       }
 
     } // Connection
